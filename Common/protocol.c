@@ -51,3 +51,89 @@ ssize_t full_write(int fd, const void *buffer, size_t count) {
     buffer = 0;
     return n_left;
 }
+
+// Funzione wrapped con controllo sull'errore della full_read
+ssize_t FullRead(int fd, void *buffer, size_t count){
+
+	int nleft;
+
+	if ( (nleft = full_read(fd, buffer, count)) < 0) {
+		perror("full_read() error");
+		exit(1);
+	}
+
+	return nleft;
+
+}
+
+// Funzione wrapped con controllo sull'errore della full_write
+ssize_t FullWrite(int fd, const void *buffer, size_t count){
+
+	int nleft;
+
+	if( (nleft = full_write(fd, buffer, count)) < 0) {
+		perror("full_write() error");
+		exit(1);
+	}
+
+	return nleft;
+}
+
+int Socket(int namespace, int style, int protocol){
+
+	 int listen_fd;
+
+	 if ((listen_fd = socket(namespace, style, protocol)) < 0) {
+	        perror("socket() error");
+	        exit(1);
+	 }
+
+	 return listen_fd;
+
+}
+int Bind(int listen_fd, struct sockaddr *addr, socklen_t lenght){
+
+	int result;
+
+	if ( (result = bind(listen_fd, addr, lenght)) < 0) {
+	        perror("bind() error");
+	        exit(1);
+	}
+
+	return result;
+
+}
+int Listen(int listen_fd, int n){
+
+	 int result;
+
+	 if ( (result = listen(listen_fd, n)) < 0) {
+	        perror("listen() error");
+	        exit(1);
+	 }
+
+	 return result;
+}
+
+int Accept(int listen_fd, struct sockaddr *addr, socklen_t *lenght_ptr){
+
+	int connfd;
+
+	if ((connfd = accept(listen_fd, addr, lenght_ptr)) < 0) {
+		perror("accept() error");
+	    exit(1);
+	}
+
+	return connfd;
+}
+int Connect(int fd, struct sockaddr *addr, socklen_t lenght){
+
+	int result;
+
+	if (connect(fd, addr, lenght) < 0) {
+		        perror("connect() error");
+		        exit(1);
+	}
+
+	return result;
+}

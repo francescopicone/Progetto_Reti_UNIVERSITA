@@ -19,14 +19,15 @@ disponibili al server e/o inviare una richiesta di prenotazione
 #define MAX_SIZE 1024
 
 /*------------------------------------
-   	 DEFINIZIONE DELLE STRUTTURE
+   	 DEFINIZIONI DELLE STRUTTURE
 ------------------------------------*/
 
 //Struttura che contiene un esame il quale è definito dal nome e dai crediti
 typedef struct Esame {
+	int ID;
     char corso[50];
     int crediti;
-} PCKG_ESAME;
+} ESAME;
 
 
 /*------------------------------------
@@ -90,7 +91,6 @@ int main(int argc, char **argv) {
 	}
 
 	/* RICEVO LA DIMENSIONE DEL MESSAGGIO DI BENVENUTO */
-
 	if (full_read(socket_fd, &welcome_size, sizeof(int)) < 0) {
 	        perror("full_read() error");
 	        exit(1);
@@ -104,6 +104,31 @@ int main(int argc, char **argv) {
 	}
 
 	printf("%s\n", buffer);
+	welcome_size = 0;
+
+	/* RICEVO IL NUMERO DI ESAMI */
+	if (full_read(socket_fd, &welcome_size, sizeof(int)) < 0) {
+		perror("full_read() error");
+		exit(1);
+	}
+
+	/* Inizializzo un array di esami per contenere quelli che riceverò */
+	ESAME esami[welcome_size];
+
+	/* RICEVO GLI ESAMI E LI MEMORIZZO NELLA STRUTTURA CREATA PRECEDENTEMENTE */
+	if (full_read(socket_fd, &esami, sizeof(ESAME)*welcome_size) < 0) {
+		        perror("full_read() error");
+		        exit(1);
+	}
+
+	printf("Numero esami disponibili: %d", welcome_size);
+
+	for(int i=0; i<welcome_size; i++){
+		printf("\n\n%d\n", esami[i].crediti);
+	}
+
+
+
 
 	return 0;
 
