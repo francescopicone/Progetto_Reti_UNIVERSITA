@@ -17,17 +17,26 @@ Implementa il server della segreteria
 
 #define MAX_SIZE 1024
 #define MAX_100	 100
+#define MAX_CORSI 128
 
 /*------------------------------------
    	 DEFINIZIONI DELLE STRUTTURE
 ------------------------------------*/
 
-//Struttura che contiene un esame il quale è definito dal nome e dai crediti
-typedef struct Esame {
+//Struttura che contiene informazioni sul corso il quale è definito da ID, nome e crediti
+typedef struct Corso {
 	int ID;
-    char corso[50];
+    char nome[50];
     int crediti;
+} CORSO;
+
+
+typedef struct Esame{
+	int ID;
+	CORSO corso;
+
 } ESAME;
+
 
 
 /*------------------------------------
@@ -40,7 +49,8 @@ typedef struct Esame {
 void rispondi_studente(int connfd);
 void invia_esame_server_u();
 int contaEsami(const char *nomeFile);
-ESAME crea_pacchetto_esami();
+CORSO crea_pacchetto_esami();
+CORSO *richiediCorsiServerU(int *numCorsi);
 
 /*------------------------------------
    	  IMPLEMENTAZIONE DEL MAIN
@@ -73,9 +83,9 @@ int main(int argc, char const *argv[]) {
 
     if (pid == 0) {
 
-    	for (;;) {
+    	printf("\033[1;32m[Segreteria]: Server started\033[1;0m\n\n");
 
-    		printf("[Segreteria] Attendo nuove richieste\n");
+    	for (;;) {
 
     		connfd = Accept(listen_fd, NULL, NULL);
 
@@ -91,7 +101,7 @@ int main(int argc, char const *argv[]) {
     			close(listen_fd);
 
     			// Gestisco l'utente connesso con la funzione dichiarata in precedenza gestisci_utente
-    			//rispondi_studente(connfd);
+    			rispondi_studente(connfd);
 
     			close(connfd);
     			exit(0);
@@ -103,15 +113,17 @@ int main(int argc, char const *argv[]) {
     	exit(0);
     }
 
+    sleep(1);
+
     while(1){
-    	printf("Selezione: \n\n1 - inserisci un nuovo esame\n\n Scelta: ");
+    	printf("Selezione: \n\n------------------------------\n\n1 - inserisci un nuovo esame\n\n------------------------------\n\nDigita la tua scelta: ");
     	scanf("%d", &scelta);
     	while (getchar() != '\n');
     
     	if(scelta == 1)
     		invia_esame_server_u();
     	else
-    		printf("Scelta non valida");
+    		printf("\033[1;91m\n\n[!]Errore: Scelta non valida. Riprovare.\033[1;0m\n\n");
     }
 }
 
@@ -124,16 +136,22 @@ void rispondi_studente(int connfd){
 
 	char welcome_message[] = "Benvenuto nella segreteria studenti!";
 	int welcome_size = strlen(welcome_message) + 1;
-
-	ESAME esami[] = {{0, "Reti dei calcolatori", 9}, {1, "Programmazione III", 6}, {2, "Basi di Dati", 9}};
+	ESAME *esami;
+	int numCorsi;
 
 	//Invio la dimensione in byte del messaggio di benvenuto
 	FullWrite(connfd, &welcome_size, sizeof(int));
 	// Invio il messaggio di benvenuto contenuto in welcome_message
 	FullWrite(connfd, welcome_message, welcome_size);
 
+	esami = richiediCorsiServerU(&numCorsi);
+
+	FullWrite(connfd, &numCorsi, sizeof(int));
+	FullWrite(connfd, esami, numCorsi * sizeof(CORSO));
+
 	sleep(1);
 
+	 /*
 	int num_esami = 3;
 
 	// Invio preventivamente il numero di esami al client studente
@@ -142,18 +160,11 @@ void rispondi_studente(int connfd){
 		exit(1);
 	}
 
-	printf("\n %s, %d\n", esami->corso, esami->crediti);
-
 	// Invio l'array contenente tutti gli esami al client studente
 	if(full_write(connfd, &esami, sizeof(esami)) < 0) {
 		perror("full_write() error");
 		exit(1);
-	}
-
-
-
-
-	close(connfd);
+	} */
 
 }
 
@@ -181,49 +192,6 @@ int contaEsami(const char *nomeFile){
 
 }
 
-ESAME crea_pacchetto_esami(){
-
-	int num_esami = contaEsami("esami.txt");
-	int fd = open("esami.txt", O_RDONLY, 0777);
-
-	ESAME temp_esami[num_esami];
-
-	write(fd, &temp_esami, sizeof(temp_esami));
-
-	printf("%c", temp_esami->corso);
-
-	return *temp_esami;
-
-	/*
-	int num_esami = contaEsami("esami.txt");
-	ESAME temp_esami[num_esami];
-
-	int fd = open("esami.txt", O_RDONLY, 0777);
-
-	char buffer[MAX_SIZE];
-	int byte_letti;
-
-	while((byte_letti = read(fd, buffer, sizeof(buffer))) > 0){
-
-		int indice = 0;
-
-		while(buffer[indice] != '/'){
-			temp_esami.data[indice] = buffer[indice];
-			indice++;
-		}
-
-		temp_esami.data[indice] = '\0';
-
-		while(buffer[indice] != '/'){
-				indice++;
-		}
-
-		indice = 0;
-
-		while(buffer)*/
-
-}
-
 void invia_esame_server_u(){
 
 	ESAME esame;
@@ -241,34 +209,66 @@ void invia_esame_server_u(){
 	    exit(1);
 	}
 
-	Connect(socket_fd, (struct sockaddr *)&server_addr_u, sizeof(server_addr_u));
-
-	FullWrite(socket_fd, &bit_iniziale, sizeof(char));
-
 	while (1) {
 		printf("Nome esame: ");
 
-		if (fgets(esame.corso, MAX_SIZE, stdin) == NULL) {
+		if (fgets(esame.corso.nome, MAX_SIZE, stdin) == NULL) {
 			perror("fgets() error");
 	        exit(1);
 	    }
 
-		esame.corso[strlen(esame.corso)-1] = 0; // Sostituisco il carattere a capo con 0
+		esame.corso.nome[strlen(esame.corso.nome)-1] = 0; // Sostituisco il carattere a capo con 0
 
 		break;
 	}
 
 	printf("Crediti esame: ");
-	scanf("%d", &esame.crediti);
-	printf("Invio [%d] %s con %d crediti", esame.ID, esame.corso, esame.crediti);
+	scanf("%d", &esame.corso.crediti);
+	printf("Invio [%d] %s con %d crediti", esame.ID, esame.corso.nome, esame.corso.crediti);
 
+	Connect(socket_fd, (struct sockaddr *)&server_addr_u, sizeof(server_addr_u));
+	FullWrite(socket_fd, &bit_iniziale, sizeof(char));
 	FullWrite(socket_fd, &esame, sizeof(esame));
+
 	close(socket_fd);
 
 }
 
-/*------------------------------------
-IMPLEMENTAZIONE DELLE FUNZIONI WRAPPED
-------------------------------------*/
+CORSO *richiediCorsiServerU(int *numCorsi){
+
+	int socket_fd, dim;
+	struct sockaddr_in server_addr_u;
+	char bit_iniziale = '2';
+
+
+	socket_fd = Socket(AF_INET, SOCK_STREAM, 0);
+	server_addr_u.sin_family = AF_INET;
+	server_addr_u.sin_port = htons(1025);
+
+	if (inet_pton(AF_INET, "127.0.0.1", &server_addr_u.sin_addr) <= 0) {
+		perror("inet_pton() error");
+		exit(1);
+	}
+
+	Connect(socket_fd, (struct sockaddr *)&server_addr_u, sizeof(server_addr_u));
+
+	FullWrite(socket_fd, &bit_iniziale, sizeof(char));
+	FullRead(socket_fd, &dim, sizeof(int));
+
+	//printf("%d", dim);
+
+	*numCorsi = dim;
+
+	CORSO *esami = (CORSO *)malloc(dim*sizeof(CORSO));
+
+	FullRead(socket_fd, esami, dim*sizeof(CORSO));
+
+	for(int i=0; i<dim; i++){
+		printf("%s, ", esami[i].nome);
+	}
+
+	return esami;
+
+}
 
 

@@ -17,19 +17,25 @@ Implementa il server della segreteria
 
 #define MAX_SIZE 1024
 #define MAX_100	 100
-
-int max_id = 1;
+#define MAX_CORSI 128
 
 /*------------------------------------
    	 DEFINIZIONI DELLE STRUTTURE
 ------------------------------------*/
 
 //Struttura che contiene un esame il quale è definito dal nome e dai crediti
-typedef struct Esame {
+typedef struct Corso {
 	int ID;
-    char corso[50];
+    char nome[50];
     int crediti;
+} CORSO;
+
+typedef struct Esame{
+	int ID;
+	CORSO corso;
+
 } ESAME;
+
 
 
 /*------------------------------------
@@ -41,6 +47,8 @@ typedef struct Esame {
 
 void ricevi_esame(int connfd);
 int contaEsami(const char *nomeFile);
+ESAME *creaPacchettoEsami(const char *nomeFile);
+void inviaMaterieSegreteria(const char *nomeFile, int connfd);
 
 /*------------------------------------
    	  IMPLEMENTAZIONE DEL MAIN
@@ -83,13 +91,15 @@ int main(int argc, char const *argv[]) {
 
             close(listen_fd);
 
-            //Ricevo il bit iniziale: se = 0, la segreteria vuole aggiungere un esame; se = 1, la segeteria inoltra una prenotazione
+            //Ricevo il bit iniziale: se = 1, la segreteria vuole aggiungere un esame; se = 0, la segeteria inoltra una prenotazione
             FullRead(connfd, &bit_iniziale, sizeof(char));
 
-            if(bit_iniziale == '1')
+
+            if(bit_iniziale == '1'){
             	ricevi_esame(connfd);
-            else
-            	//ricevi_prenotazione(connfd);
+            }
+            else if (bit_iniziale == '2')
+            	inviaMaterieSegreteria("esami.txt", connfd);
 
             close(connfd);
             exit(0);
@@ -112,9 +122,11 @@ void ricevi_esame(int connfd){
 
 	FullRead(connfd, &esame, sizeof(ESAME));
 
+	esame.ID = contaEsami("esami.txt")+1;
+
 	memorizza_esame(esame);
 
-	printf("\nHo ricevuto il seguente esame %s - %d", esame.corso, esame.crediti);
+	printf("[Server universitario] \033[1;32mHo aggiunto il seguente esame %s - %d\033[1;0m\n", esame.corso.nome, esame.corso.crediti);
 
 	close(connfd);
 
@@ -124,7 +136,17 @@ void memorizza_esame(ESAME esame){
 
 	int fd = open("esami.txt", O_WRONLY | O_APPEND, 0777);
 
-	dprintf(fd, "%d/%s/%d\n", esame.ID, esame.corso, esame.crediti);
+	if(flock(fd, LOCK_EX) < 0) {
+		perror("flock() error");
+	    exit(1);
+	}
+
+	dprintf(fd, "%d;%s;%d\n", esame.ID, esame.corso.nome, esame.corso.crediti);
+
+	if (flock(fd, LOCK_UN) < 0) {
+	    perror("flock() unlock error");
+	    exit(1);
+	}
 
 	close(fd);
 }
@@ -152,4 +174,108 @@ int contaEsami(const char *nomeFile){
 
 }
 
+ESAME *creaPacchettoEsami(const char *nomeFile){
 
+	int numero_esami = contaEsami("esami.txt");
+	ESAME *esami = (ESAME *)malloc(numero_esami*sizeof(CORSO));
+	char *buffer = (char *)malloc(MAX_SIZE);
+
+	int fd = open("esami.txt", O_RDONLY);
+
+	if(flock(fd, LOCK_EX) < 0) {
+			perror("flock() error");
+		    exit(1);
+	}
+
+	lseek(fd, 0, SEEK_SET);
+
+	int conteggio = 0, i = 0;
+	char c;
+
+	while(read(fd, &c, 1) > 0){
+		if (c == '\n'){
+
+			buffer[conteggio] = '\0';
+			sscanf(buffer, "%d;%49[^;];%d", &esami[i].ID, esami[i].corso.nome, &esami[i].corso.crediti);
+			i++;
+
+			free(buffer);
+			buffer = (char *)malloc(MAX_SIZE);
+			conteggio = 0;
+
+		}
+		else {
+			buffer[conteggio] = c;
+			conteggio++;
+		}
+
+	}
+
+	if (flock(fd, LOCK_UN) < 0) {
+		    perror("flock() unlock error");
+		    exit(1);
+	}
+
+	close(fd);
+
+	return esami;
+
+}
+
+void inviaMaterieSegreteria(const char *nomeFile, int connfd){
+
+	CORSO tmp_corsi[MAX_CORSI];
+	int numCorsi = 0, duplicato=0, conteggio=0, i=0;
+	char c, *buffer = (char *)malloc(MAX_SIZE);
+
+	int fd = open(nomeFile, O_RDONLY);
+
+	while(read(fd, &c, 1) > 0){
+
+		int duplicato = 0;
+
+		if (c == '\n'){
+			buffer[conteggio] = '\0';
+
+			sscanf(buffer, "%d;%49[^;];%d", &tmp_corsi[i].ID, tmp_corsi[i].nome, &tmp_corsi[i].crediti);
+
+			for(int j=0; j<numCorsi; j++){
+				if(strcmp(buffer, tmp_corsi[i].nome) == 0){
+					duplicato = 1;
+					break;
+				}
+			}
+
+			if(!duplicato){
+				i++;
+				numCorsi++;
+			}
+
+			free(buffer);
+			buffer = (char *)malloc(MAX_SIZE);
+			conteggio = 0;
+		}
+
+		else {
+			buffer[conteggio] = c;
+			conteggio++;
+		}
+
+	}
+
+
+	printf("DB2- num. materie = %d", numCorsi);
+
+	CORSO *esami = malloc(numCorsi*sizeof(CORSO));
+
+	for(int i=0; i<numCorsi; i++){
+			strcpy(esami[i].nome, tmp_corsi[i].nome);
+			printf("%s, ", esami[i].nome);
+	}
+
+	close(fd);
+
+	FullWrite(connfd, &numCorsi, sizeof(int));
+	FullWrite(connfd, esami, numCorsi*sizeof(CORSO));
+
+}
