@@ -48,7 +48,7 @@ typedef struct Esame{
 void ricevi_esame(int connfd);
 int contaEsami(const char *nomeFile);
 ESAME *creaPacchettoEsami(const char *nomeFile);
-void inviaMaterieSegreteria(const char *nomeFile, int connfd);
+void inviaCorsiSegreteria(const char *nomeFile, int connfd);
 
 /*------------------------------------
    	  IMPLEMENTAZIONE DEL MAIN
@@ -99,7 +99,7 @@ int main(int argc, char const *argv[]) {
             	ricevi_esame(connfd);
             }
             else if (bit_iniziale == '2')
-            	inviaMaterieSegreteria("esami.txt", connfd);
+            	inviaCorsiSegreteria("esami.txt", connfd);
 
             close(connfd);
             exit(0);
@@ -222,7 +222,7 @@ ESAME *creaPacchettoEsami(const char *nomeFile){
 
 }
 
-void inviaMaterieSegreteria(const char *nomeFile, int connfd){
+void inviaCorsiSegreteria(const char *nomeFile, int connfd){
 
 	CORSO tmp_corsi[MAX_CORSI];
 	int numCorsi = 0, duplicato=0, conteggio=0, i=0;
