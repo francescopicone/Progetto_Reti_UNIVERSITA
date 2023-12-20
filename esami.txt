@@ -2,3 +2,6 @@
 2;Algebra;12
 3;Fisica;6
 4;Tecnica;12
+3;Fisica;6
+1;Reti di calcolatori;9
+1;Reti di calcolatori;9

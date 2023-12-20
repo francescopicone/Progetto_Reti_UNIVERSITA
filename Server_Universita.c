@@ -240,7 +240,7 @@ void inviaCorsiSegreteria(const char *nomeFile, int connfd){
 			sscanf(buffer, "%d;%49[^;];%d", &tmp_corsi[i].ID, tmp_corsi[i].nome, &tmp_corsi[i].crediti);
 
 			for(int j=0; j<numCorsi; j++){
-				if(strcmp(buffer, tmp_corsi[i].nome) == 0){
+				if(strcmp(tmp_corsi[i].nome, tmp_corsi[j].nome) == 0){
 					duplicato = 1;
 					break;
 				}
@@ -262,9 +262,6 @@ void inviaCorsiSegreteria(const char *nomeFile, int connfd){
 		}
 
 	}
-
-
-	printf("DB2- num. materie = %d", numCorsi);
 
 	CORSO *esami = malloc(numCorsi*sizeof(CORSO));
 

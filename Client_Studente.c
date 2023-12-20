@@ -17,10 +17,16 @@ disponibili al server e/o inviare una richiesta di prenotazione
 #include "Common/protocol.h"
 
 #define MAX_SIZE 1024
+#define MAT_SIZE 11
 
 /*------------------------------------
    	 DEFINIZIONI DELLE STRUTTURE
 ------------------------------------*/
+
+//Struttura che contiene i dati di uno studente
+typedef struct Studente{
+	char matricola[MAT_SIZE];
+} STUDENTE;
 
 //Struttura che contiene un esame il quale è definito dal nome e dai crediti
 typedef struct Corso {
@@ -35,6 +41,12 @@ typedef struct Esame{
 
 } ESAME;
 
+/*------------------------------------
+   	  PROTOTIPI DELLE FUNZIONI
+------------------------------------*/
+
+void pulisciSTDINBuffer();
+
 
 /*------------------------------------
    	  IMPLEMENTAZIONE DEL MAIN
@@ -42,12 +54,14 @@ typedef struct Esame{
 
 int main(int argc, char **argv) {
 
-	int socket_fd, welcome_size;
+	int socket_fd, welcome_size, login_result;
 	struct hostent *data;
 	struct sockaddr_in server_addr;
 	char **alias;
 	char *addr;
 	char buffer[MAX_SIZE];
+	STUDENTE studente;
+	char matricola[MAT_SIZE];
 
 
 	if (argc != 2) {
@@ -68,7 +82,7 @@ int main(int argc, char **argv) {
 	server_addr.sin_port = htons(1024);
 
 
-	// Con la gethostbyname mi ricavO l'indirizzo IP dell'hostname passato come argomento da terminale e memorizzo tutto in data
+	// Con la gethostbyname mi ricavo l'indirizzo IP dell'hostname passato come argomento da terminale e memorizzo tutto in data
 	if ((data = gethostbyname(argv[1])) == NULL) {
 	        herror("gethostbyname() error");
 			exit(1);
@@ -97,35 +111,62 @@ int main(int argc, char **argv) {
 	}
 
 	/* RICEVO LA DIMENSIONE DEL MESSAGGIO DI BENVENUTO */
-	if (full_read(socket_fd, &welcome_size, sizeof(int)) < 0) {
-	        perror("full_read() error");
-	        exit(1);
-	}
-
-	/* RICEVO IL MESSAGGIO DI BENVENUTO E LO STAMPO A SCHERMO */
-
-	if (full_read(socket_fd, buffer, welcome_size) < 0) {
-	        perror("full_read() error");
-	        exit(1);
-	}
-
-	printf("%s\n", buffer);
-	welcome_size = 0;
-
-	/* RICEVO IL NUMERO DI CORSI */
 	FullRead(socket_fd, &welcome_size, sizeof(int));
 
-	CORSO *corsi_disp = (CORSO *)malloc(welcome_size * sizeof(CORSO));
+	/* RICEVO IL MESSAGGIO DI BENVENUTO E LO STAMPO A SCHERMO */
+	FullRead(socket_fd, buffer, welcome_size);
 
-	/* RICEVO GLI ESAMI E LI MEMORIZZO NELLA STRUTTURA CREATA PRECEDENTEMENTE */
-	FullRead(socket_fd, corsi_disp, sizeof(CORSO) * welcome_size);
+	printf("%s", buffer);
 
-	printf("Numero corsi disponibili: %d \nLista dei corsi: \n\n", welcome_size);
 
-	for(int i=0; i<welcome_size; i++){
-		printf("%d - %s\n", i+1, corsi_disp[i].nome);
+	while(1){
+		printf("Inserisci la matricola: ");
+		fgets(matricola, MAX_SIZE, stdin);
+		if(strlen(matricola) != MAT_SIZE)
+			printf("\033[1;91m[!] Errore: la matricola deve essere di 10 caratteri !\033[1;0m\n");
+		else{
+			// Rimuovo il carattere newline (\n) alla fine della stringa
+			matricola[MAT_SIZE - 1] = '\0';
+			break;
+		}
+	}
+
+	/* INVIO LA MATRICOLA ALLA SEGRETERIA */
+	FullWrite(socket_fd, &matricola, sizeof(char)*MAT_SIZE);
+	/* RICEVO L'ESITO DEL LOGIN */
+	FullRead(socket_fd, &login_result, sizeof(int));
+
+	if(login_result){
+		FullRead(socket_fd, &welcome_size, sizeof(int));
+		FullRead(socket_fd, &buffer, welcome_size);
+		printf("\033[1;32m%s\033[1;0m", buffer);
+
+		/* RICEVO IL NUMERO DI CORSI */
+		FullRead(socket_fd, &welcome_size, sizeof(int));
+
+		CORSO *corsi_disp = (CORSO *)malloc(welcome_size * sizeof(CORSO));
+
+		/* RICEVO GLI ESAMI E LI MEMORIZZO NELLA STRUTTURA CREATA PRECEDENTEMENTE */
+		FullRead(socket_fd, corsi_disp, sizeof(CORSO) * welcome_size);
+
+		printf("Sono disponibili appelli per i seguenti corsi:\n\n");
+		for(int i=0; i<welcome_size; i++){
+			printf("%d - %s\n", i+1, corsi_disp[i].nome);
+		}
+		printf("\nTotale corsi: %d\n------------------------------\nInserisci il nome del corso per conoscerne gli appelli: ", welcome_size+1);
+	}
+
+	else {
+		printf("\033[1;91mLogin Fallita! Matricola non registrata.\n", buffer);
 	}
 
 	return 0;
 
+}
+
+
+
+void pulisciSTDINBuffer() {
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
 }

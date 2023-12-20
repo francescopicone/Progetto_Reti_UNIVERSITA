@@ -18,10 +18,18 @@ Implementa il server della segreteria
 #define MAX_SIZE 1024
 #define MAX_100	 100
 #define MAX_CORSI 128
+#define MAT_SIZE 11
 
 /*------------------------------------
    	 DEFINIZIONI DELLE STRUTTURE
 ------------------------------------*/
+
+//Struttura che contiene i dati di uno studente
+typedef struct Studente {
+	char matricola[MAT_SIZE];
+	char nome[50];
+	char cognome[50];
+} STUDENTE;
 
 //Struttura che contiene informazioni sul corso il quale è definito da ID, nome e crediti
 typedef struct Corso {
@@ -46,11 +54,13 @@ typedef struct Esame{
 //void Bind(int listen_fd, struct sockaddr *addr, socklen_t lenght);	// Funzione wrapped per la bind
 //void Listen(int listen_fd, int n);		// Funzione wrapped per la listen
 
-void rispondi_studente(int connfd);
+void rispondiStudente(int connfd);
 void invia_esame_server_u();
 int contaEsami(const char *nomeFile);
 CORSO crea_pacchetto_esami();
 CORSO *richiediCorsiServerU(int *numCorsi);
+int controllaStudente(STUDENTE *studente);
+
 
 /*------------------------------------
    	  IMPLEMENTAZIONE DEL MAIN
@@ -83,7 +93,7 @@ int main(int argc, char const *argv[]) {
 
     if (pid == 0) {
 
-    	printf("\033[1;32m[Segreteria]: Server started\033[1;0m\n\n");
+    	printf("\033[1;32m[Segreteria]: Server online\033[1;0m\n\n");
 
     	for (;;) {
 
@@ -101,7 +111,7 @@ int main(int argc, char const *argv[]) {
     			close(listen_fd);
 
     			// Gestisco l'utente connesso con la funzione dichiarata in precedenza gestisci_utente
-    			rispondi_studente(connfd);
+    			rispondiStudente(connfd);
 
     			close(connfd);
     			exit(0);
@@ -132,40 +142,48 @@ int main(int argc, char const *argv[]) {
    IMPLEMENTAZIONE DELLE FUNZIONI
 ------------------------------------*/
 
-void rispondi_studente(int connfd){
+void rispondiStudente(int connfd){
 
-	char welcome_message[] = "Benvenuto nella segreteria studenti!";
+	char welcome_message[] = "BENVENUTO NELLA SEGRETERIA STUDENTI!\nEFFETTUA IL LOGIN CON LA MATRICOLA\n\n";
 	int welcome_size = strlen(welcome_message) + 1;
+	char err_login_message[] = "LOGIN FALLITA. STUDENTE INESISTENTE.";
+	int err_login_size = strlen(err_login_message) + 1;
 	ESAME *esami;
 	int numCorsi;
+	STUDENTE studente;
+	char matricola[MAT_SIZE];
 
 	//Invio la dimensione in byte del messaggio di benvenuto
 	FullWrite(connfd, &welcome_size, sizeof(int));
 	// Invio il messaggio di benvenuto contenuto in welcome_message
 	FullWrite(connfd, welcome_message, welcome_size);
 
-	esami = richiediCorsiServerU(&numCorsi);
+	FullRead(connfd, &matricola, sizeof(char)*MAT_SIZE);
+	strcpy(studente.matricola, matricola);
 
-	FullWrite(connfd, &numCorsi, sizeof(int));
-	FullWrite(connfd, esami, numCorsi * sizeof(CORSO));
+	int result = controllaStudente(&studente);
 
-	sleep(1);
+	//INVIO IL RISULTATO DELLA LOGIN ALLO STUDENTE
+	FullWrite(connfd, &result, sizeof(int));
 
-	 /*
-	int num_esami = 3;
+	if(result){
+		welcome_size = snprintf(NULL, 0, "Bentornato %s %s ! \n\n", studente.nome, studente.cognome);
+		printf("welcome_size = %d", welcome_size);
+		char *bentornato_message = (char *)malloc(welcome_size);
+		snprintf(bentornato_message, welcome_size, "Bentornato %s %s ! \n\n", studente.nome, studente.cognome);
 
-	// Invio preventivamente il numero di esami al client studente
-	if(full_write(connfd, &num_esami, sizeof(int)) < 0) {
-		perror("full_write() error");
-		exit(1);
+		//Invio la dimensione della conferma di accesso
+		FullWrite(connfd, &welcome_size, sizeof(int));
+		//Invio una conferma di accesso
+		FullWrite(connfd, bentornato_message, welcome_size);
+
+		free(bentornato_message);
+
+		esami = richiediCorsiServerU(&numCorsi);
+
+		FullWrite(connfd, &numCorsi, sizeof(int));
+		FullWrite(connfd, esami, numCorsi * sizeof(CORSO));
 	}
-
-	// Invio l'array contenente tutti gli esami al client studente
-	if(full_write(connfd, &esami, sizeof(esami)) < 0) {
-		perror("full_write() error");
-		exit(1);
-	} */
-
 }
 
 
@@ -271,4 +289,43 @@ CORSO *richiediCorsiServerU(int *numCorsi){
 
 }
 
+int controllaStudente(STUDENTE *studente){
 
+	char c, *buffer = (char *)malloc(MAX_SIZE);
+	int conteggio = 0;
+	STUDENTE tmp_studente;
+	int check = 0;
+
+	int fd = open("studenti.txt", O_RDONLY);
+
+	while(read(fd, &c, 1) > 0){
+
+		if (c == '\n'){
+
+			buffer[conteggio] = '\0';
+			sscanf(buffer, "%10[^;];%49[^;];%49[^;]", tmp_studente.matricola, tmp_studente.nome, tmp_studente.cognome);
+
+			printf("confronto %s - %s", studente->matricola, tmp_studente.matricola);
+			if (strcmp(studente->matricola, tmp_studente.matricola) == 0){
+				strcpy(studente->nome, tmp_studente.nome);
+				strcpy(studente->cognome, tmp_studente.cognome);
+				check = 1;
+				break;
+			}
+
+			free(buffer);
+			buffer = (char *)malloc(MAX_SIZE);
+			conteggio = 0;
+		}
+
+		else {
+			buffer[conteggio] = c;
+			conteggio++;
+		}
+	}
+
+	close(fd);
+	free(buffer);
+	return check;
+
+}
