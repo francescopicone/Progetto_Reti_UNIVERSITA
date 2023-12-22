@@ -30,10 +30,17 @@ typedef struct Corso {
     int crediti;
 } CORSO;
 
+//Struttura per memorizzare una data
+typedef struct {
+    int day;
+    int month;
+    int year;
+} DATE;
+
 typedef struct Esame{
 	int ID;
 	CORSO corso;
-
+	DATE data;
 } ESAME;
 
 
@@ -141,7 +148,7 @@ void memorizza_esame(ESAME esame){
 	    exit(1);
 	}
 
-	dprintf(fd, "%d;%s;%d\n", esame.ID, esame.corso.nome, esame.corso.crediti);
+	dprintf(fd, "%d;%s;%d;%d;%d;%d\n", esame.ID, esame.corso.nome, esame.corso.crediti, esame.data.day, esame.data.month, esame.data.year);
 
 	if (flock(fd, LOCK_UN) < 0) {
 	    perror("flock() unlock error");
@@ -196,7 +203,7 @@ ESAME *creaPacchettoEsami(const char *nomeFile){
 		if (c == '\n'){
 
 			buffer[conteggio] = '\0';
-			sscanf(buffer, "%d;%49[^;];%d", &esami[i].ID, esami[i].corso.nome, &esami[i].corso.crediti);
+			sscanf(buffer, "%d;%49[^;];%d;%d;%d;%d", &esami[i].ID, esami[i].corso.nome, &esami[i].corso.crediti, &esami[i].data.day, esami[i].data.month, esami[i].data.year);
 			i++;
 
 			free(buffer);
@@ -227,6 +234,7 @@ void inviaCorsiSegreteria(const char *nomeFile, int connfd){
 	CORSO tmp_corsi[MAX_CORSI];
 	int numCorsi = 0, duplicato=0, conteggio=0, i=0;
 	char c, *buffer = (char *)malloc(MAX_SIZE);
+	int d,m,y;
 
 	int fd = open(nomeFile, O_RDONLY);
 
@@ -237,7 +245,7 @@ void inviaCorsiSegreteria(const char *nomeFile, int connfd){
 		if (c == '\n'){
 			buffer[conteggio] = '\0';
 
-			sscanf(buffer, "%d;%49[^;];%d", &tmp_corsi[i].ID, tmp_corsi[i].nome, &tmp_corsi[i].crediti);
+			sscanf(buffer, "%d;%49[^;];%d;%d;%d;%d", &tmp_corsi[i].ID, tmp_corsi[i].nome, &tmp_corsi[i].crediti, &d, &m, &y);
 
 			for(int j=0; j<numCorsi; j++){
 				if(strcmp(tmp_corsi[i].nome, tmp_corsi[j].nome) == 0){

@@ -13,6 +13,7 @@ Implementa il server della segreteria
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <time.h>
 #include "Common/protocol.h"
 
 #define MAX_SIZE 1024
@@ -38,12 +39,21 @@ typedef struct Corso {
     int crediti;
 } CORSO;
 
+//Struttura per memorizzare una data
+typedef struct {
+    int day;
+    int month;
+    int year;
+} DATE;
+
 
 typedef struct Esame{
 	int ID;
 	CORSO corso;
-
+	DATE data;
 } ESAME;
+
+
 
 
 
@@ -216,6 +226,7 @@ void invia_esame_server_u(){
 	int socket_fd;
 	struct sockaddr_in server_addr_u;
 	char bit_iniziale = '1';
+	int result;
 
 	socket_fd = Socket(AF_INET, SOCK_STREAM, 0);
 
@@ -242,7 +253,20 @@ void invia_esame_server_u(){
 
 	printf("Crediti esame: ");
 	scanf("%d", &esame.corso.crediti);
-	printf("Invio [%d] %s con %d crediti", esame.ID, esame.corso.nome, esame.corso.crediti);
+
+	while(1){
+		printf("Data esame (nel formato dd/mm/aaaa): ");
+		result = scanf("%d/%d/%d", &esame.data.day, &esame.data.month, &esame.data.year);
+		if(controllaData(esame.data.day, esame.data.month, esame.data.year) && result == 3)
+			break;
+		else {
+			printf("\nData non corretta. Riprovare.\n");
+			int c;
+			while ((c = getchar()) != '\n' && c != EOF);
+		}
+	}
+
+	printf("Invio %s con %d crediti del %d/%d/%d\n", esame.corso.nome, esame.corso.crediti, esame.data.day, esame.data.month, esame.data.year);
 
 	Connect(socket_fd, (struct sockaddr *)&server_addr_u, sizeof(server_addr_u));
 	FullWrite(socket_fd, &bit_iniziale, sizeof(char));
@@ -327,5 +351,37 @@ int controllaStudente(STUDENTE *studente){
 	close(fd);
 	free(buffer);
 	return check;
+
+}
+
+int controllaData(int day, int month, int year){
+
+	int days;
+	time_t currentTime;
+	struct tm *localTime;
+
+	time(&currentTime);     // Ottiengo il tempo corrente in secondi
+	localTime = localtime(&currentTime); // Converto currentTime in una struttura tm
+
+	if (year < localTime->tm_year+1900)
+		return 0; //anno non valido
+	else if (year == localTime->tm_year+1900 && month < localTime->tm_mon+1)
+		return 0; //mese non valido
+	else if (year == localTime->tm_year+1900 && month == localTime->tm_mon+1 && day < localTime->tm_mday)
+		return 0; //giorno non valido
+
+	if (month == 2)
+		days = 29;
+	else if (month == 4 || month == 6 || month == 9 || month == 11)
+		days = 30;
+	else
+		days = 31;
+
+	if (day < 1 || day > days) {
+	        return 0; // Giorno non valido
+	}
+
+	//se tutti i controlli hanno successo ritorno 1
+	return 1;
 
 }

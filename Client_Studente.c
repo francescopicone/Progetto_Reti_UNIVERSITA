@@ -35,11 +35,20 @@ typedef struct Corso {
     int crediti;
 } CORSO;
 
+//Struttura per memorizzare una data
+typedef struct {
+    int day;
+    int month;
+    int year;
+} DATE;
+
 typedef struct Esame{
 	int ID;
 	CORSO corso;
-
+	DATE data;
 } ESAME;
+
+
 
 /*------------------------------------
    	  PROTOTIPI DELLE FUNZIONI
@@ -60,7 +69,6 @@ int main(int argc, char **argv) {
 	char **alias;
 	char *addr;
 	char buffer[MAX_SIZE];
-	STUDENTE studente;
 	char matricola[MAT_SIZE];
 
 
@@ -153,7 +161,7 @@ int main(int argc, char **argv) {
 		for(int i=0; i<welcome_size; i++){
 			printf("%d - %s\n", i+1, corsi_disp[i].nome);
 		}
-		printf("\nTotale corsi: %d\n------------------------------\nInserisci il nome del corso per conoscerne gli appelli: ", welcome_size+1);
+		printf("\nTotale corsi: %d\n------------------------------\nInserisci il nome del corso per conoscerne gli appelli: ", welcome_size);
 	}
 
 	else {
@@ -163,7 +171,6 @@ int main(int argc, char **argv) {
 	return 0;
 
 }
-
 
 
 void pulisciSTDINBuffer() {
