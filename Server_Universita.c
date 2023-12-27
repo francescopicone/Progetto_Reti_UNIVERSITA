@@ -13,6 +13,7 @@ Implementa il server della segreteria
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/file.h>
 #include "Common/protocol.h"
 
 #define MAX_SIZE 1024
@@ -53,8 +54,9 @@ typedef struct Esame{
 //void Listen(int listen_fd, int n);		// Funzione wrapped per la listen
 
 void ricevi_esame(int connfd);
+void memorizza_esame(ESAME esame);
 int contaEsami(const char *nomeFile);
-ESAME *creaPacchettoEsami(const char *nomeFile);
+void inviaEsamiSegreteria(int connfd);
 void inviaCorsiSegreteria(const char *nomeFile, int connfd);
 
 /*------------------------------------
@@ -107,6 +109,8 @@ int main(int argc, char const *argv[]) {
             }
             else if (bit_iniziale == '2')
             	inviaCorsiSegreteria("esami.txt", connfd);
+            else if (bit_iniziale == '3')
+            	inviaEsamiSegreteria(connfd);
 
             close(connfd);
             exit(0);
@@ -181,11 +185,75 @@ int contaEsami(const char *nomeFile){
 
 }
 
-ESAME *creaPacchettoEsami(const char *nomeFile){
+int contaEsamiN(const char *nomeCorso){
 
-	int numero_esami = contaEsami("esami.txt");
-	ESAME *esami = (ESAME *)malloc(numero_esami*sizeof(CORSO));
 	char *buffer = (char *)malloc(MAX_SIZE);
+	ESAME tmp_esame;
+	int numEsami = 0;
+
+	printf("\nNome corso: %s", nomeCorso);
+
+	int fd = open("esami.txt", O_RDONLY);
+
+	if (fd < 0) {
+		perror("open() error");
+		exit(1);
+	}
+
+	if(flock(fd, LOCK_EX) < 0) {
+		perror("flock() error");
+		exit(1);
+	}
+
+	lseek(fd, 0, SEEK_SET);
+
+	int conteggio = 0;
+	char c;
+	while(read(fd, &c, 1) > 0){
+		if (c == '\n'){
+			buffer[conteggio] = '\0';
+		 	sscanf(buffer, "%d;%49[^;];%d;%d;%d;%d", &tmp_esame.ID, tmp_esame.corso.nome, &tmp_esame.corso.crediti, &tmp_esame.data.day, &tmp_esame.data.month, &tmp_esame.data.year);
+
+		 	if (strcmp(nomeCorso, tmp_esame.corso.nome) == 0){
+		 		numEsami++;
+		 	}
+
+		 	free(buffer);
+		 	buffer = (char *)malloc(MAX_SIZE);
+		 	conteggio = 0;
+		 }
+
+		 else {
+			buffer[conteggio] = c;
+			conteggio++;
+		 }
+
+	}
+
+	if (flock(fd, LOCK_UN) < 0) {
+		perror("flock() unlock error");
+		exit(1);
+	}
+
+	free(buffer);
+	close(fd);
+	return numEsami;
+}
+
+
+void inviaEsamiSegreteria(int connfd){
+
+	int numero_esami, dim;
+	ESAME tmp_esame;
+	char *buffer = (char *)malloc(MAX_SIZE);
+
+	FullRead(connfd, &dim, sizeof(int));
+	char *nome_corso = (char *)malloc(dim);
+	FullRead(connfd, nome_corso, dim);
+
+	numero_esami = contaEsamiN(nome_corso);
+	printf("Numero esami tot.: %d", numero_esami);
+	ESAME *esami = (ESAME *)malloc(numero_esami*sizeof(CORSO));
 
 	int fd = open("esami.txt", O_RDONLY);
 
@@ -203,14 +271,21 @@ ESAME *creaPacchettoEsami(const char *nomeFile){
 		if (c == '\n'){
 
 			buffer[conteggio] = '\0';
-			sscanf(buffer, "%d;%49[^;];%d;%d;%d;%d", &esami[i].ID, esami[i].corso.nome, &esami[i].corso.crediti, &esami[i].data.day, esami[i].data.month, esami[i].data.year);
-			i++;
+			sscanf(buffer, "%d;%49[^;];%d;%d;%d;%d", &tmp_esame.ID, tmp_esame.corso.nome, &tmp_esame.corso.crediti, &tmp_esame.data.day, &tmp_esame.data.month, &tmp_esame.data.year);
+
+			if (strcmp(nome_corso, tmp_esame.corso.nome) == 0){
+				esami[i].ID = tmp_esame.ID;
+				esami[i].corso = tmp_esame.corso;
+				esami[i].data = tmp_esame.data;
+				i++;
+			}
 
 			free(buffer);
 			buffer = (char *)malloc(MAX_SIZE);
 			conteggio = 0;
 
 		}
+
 		else {
 			buffer[conteggio] = c;
 			conteggio++;
@@ -225,7 +300,12 @@ ESAME *creaPacchettoEsami(const char *nomeFile){
 
 	close(fd);
 
-	return esami;
+	for(int j=0; j<numero_esami; j++){
+		printf("\n%d - %s", esami[j].ID, esami[j].corso.nome);
+	}
+
+	FullWrite(connfd, &numero_esami, sizeof(int));
+	FullWrite(connfd, esami, sizeof(ESAME)*numero_esami);
 
 }
 
@@ -282,5 +362,8 @@ void inviaCorsiSegreteria(const char *nomeFile, int connfd){
 
 	FullWrite(connfd, &numCorsi, sizeof(int));
 	FullWrite(connfd, esami, numCorsi*sizeof(CORSO));
+
+	free(esami);
+	free(buffer);
 
 }

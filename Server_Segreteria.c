@@ -67,9 +67,10 @@ typedef struct Esame{
 void rispondiStudente(int connfd);
 void invia_esame_server_u();
 int contaEsami(const char *nomeFile);
-CORSO crea_pacchetto_esami();
+ESAME *richiediEsamiServerU(const char *nomeCorso, int *numEsami);
 CORSO *richiediCorsiServerU(int *numCorsi);
 int controllaStudente(STUDENTE *studente);
+int controllaData(int day, int month, int year);
 
 
 /*------------------------------------
@@ -158,10 +159,12 @@ void rispondiStudente(int connfd){
 	int welcome_size = strlen(welcome_message) + 1;
 	char err_login_message[] = "LOGIN FALLITA. STUDENTE INESISTENTE.";
 	int err_login_size = strlen(err_login_message) + 1;
+	CORSO *corsi;
 	ESAME *esami;
-	int numCorsi;
+	int numCorsi, numEsami;
 	STUDENTE studente;
 	char matricola[MAT_SIZE];
+	char nome_corso[MAX_SIZE];
 
 	//Invio la dimensione in byte del messaggio di benvenuto
 	FullWrite(connfd, &welcome_size, sizeof(int));
@@ -189,10 +192,20 @@ void rispondiStudente(int connfd){
 
 		free(bentornato_message);
 
-		esami = richiediCorsiServerU(&numCorsi);
+		corsi = richiediCorsiServerU(&numCorsi);
 
 		FullWrite(connfd, &numCorsi, sizeof(int));
-		FullWrite(connfd, esami, numCorsi * sizeof(CORSO));
+		FullWrite(connfd, corsi, numCorsi * sizeof(CORSO));
+
+		FullRead(connfd, &welcome_size, sizeof(int));
+		FullRead(connfd, &nome_corso, welcome_size);
+
+		esami = richiediEsamiServerU(nome_corso, &numEsami);
+
+		FullWrite(connfd, &numEsami, sizeof(int));
+		FullWrite(connfd, esami, numEsami*sizeof(ESAME));
+
+
 	}
 }
 
@@ -297,18 +310,54 @@ CORSO *richiediCorsiServerU(int *numCorsi){
 	FullWrite(socket_fd, &bit_iniziale, sizeof(char));
 	FullRead(socket_fd, &dim, sizeof(int));
 
-	//printf("%d", dim);
-
 	*numCorsi = dim;
 
-	CORSO *esami = (CORSO *)malloc(dim*sizeof(CORSO));
+	CORSO *corsi = (CORSO *)malloc(dim*sizeof(CORSO));
 
-	FullRead(socket_fd, esami, dim*sizeof(CORSO));
+	FullRead(socket_fd, corsi, dim*sizeof(CORSO));
 
 	for(int i=0; i<dim; i++){
-		printf("%s, ", esami[i].nome);
+		printf("%s, ", corsi[i].nome);
 	}
 
+	close(socket_fd);
+	return corsi;
+
+}
+
+ESAME *richiediEsamiServerU(const char *nomeCorso, int *numEsami){
+
+	int socket_fd, dim;
+	struct sockaddr_in server_addr_u;
+	char bit_iniziale = '3';
+
+
+	socket_fd = Socket(AF_INET, SOCK_STREAM, 0);
+	server_addr_u.sin_family = AF_INET;
+	server_addr_u.sin_port = htons(1025);
+
+	if (inet_pton(AF_INET, "127.0.0.1", &server_addr_u.sin_addr) <= 0) {
+		perror("inet_pton() error");
+		exit(1);
+	}
+
+	Connect(socket_fd, (struct sockaddr *)&server_addr_u, sizeof(server_addr_u));
+
+	FullWrite(socket_fd, &bit_iniziale, sizeof(char));
+
+	dim = strlen(nomeCorso)+1;
+
+	FullWrite(socket_fd, &dim, sizeof(int));
+	FullWrite(socket_fd, nomeCorso, dim);
+
+	FullRead(socket_fd, &dim, sizeof(int));
+
+	*numEsami = dim;
+
+	ESAME *esami = (ESAME *)malloc(dim*sizeof(ESAME));
+	FullRead(socket_fd, esami, dim*sizeof(ESAME));
+
+	close(socket_fd);
 	return esami;
 
 }

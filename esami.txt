@@ -5,3 +5,4 @@
 5;ELIM;6;12;1;2024
 6;Calcolo numerico;6;12;1;2024
 7;Analisi I;12;16;1;2024
+4;Fisica;6;30;3;2024

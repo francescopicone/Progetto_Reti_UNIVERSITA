@@ -63,7 +63,7 @@ void pulisciSTDINBuffer();
 
 int main(int argc, char **argv) {
 
-	int socket_fd, welcome_size, login_result;
+	int socket_fd, welcome_size, login_result, dim;
 	struct hostent *data;
 	struct sockaddr_in server_addr;
 	char **alias;
@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
 	}
 
 	/* INVIO LA MATRICOLA ALLA SEGRETERIA */
-	FullWrite(socket_fd, &matricola, sizeof(char)*MAT_SIZE);
+	FullWrite(socket_fd, &matricola, MAT_SIZE);
 	/* RICEVO L'ESITO DEL LOGIN */
 	FullRead(socket_fd, &login_result, sizeof(int));
 
@@ -161,11 +161,41 @@ int main(int argc, char **argv) {
 		for(int i=0; i<welcome_size; i++){
 			printf("%d - %s\n", i+1, corsi_disp[i].nome);
 		}
-		printf("\nTotale corsi: %d\n------------------------------\nInserisci il nome del corso per conoscerne gli appelli: ", welcome_size);
+		printf("\nTotale corsi: %d\n------------------------------", welcome_size);
+
+		buffer[0] = '\0';
+
+		while(1){
+			printf("\nDigita il nome del corso per conoscerne le date: ");
+			fgets(buffer, MAX_SIZE, stdin);
+			if(strlen(buffer) > 0){
+				buffer[strlen(buffer) - 1] = '\0';
+				break;
+			}
+			else {
+				printf("\n\033[1;91m[!] Errore: Inserire un nome valido !\033[1;0m");
+			}
+		}
+
+		welcome_size = strlen(buffer)+1;
+
+		FullWrite(socket_fd, &welcome_size, sizeof(int));
+		FullWrite(socket_fd, &buffer, welcome_size);
+
+		FullRead(socket_fd, &welcome_size, sizeof(int));
+		ESAME *esami_disp = (ESAME *)malloc(welcome_size * sizeof(ESAME));
+		FullRead(socket_fd, esami_disp, welcome_size * sizeof(ESAME));
+
+		printf("\nSono disponibili i seguenti appelli per %s: \n\n", buffer);
+		for(int i=0; i<welcome_size; i++){
+			printf("\nID:%d - %s DATA:%d/%d/%d CFU: %d", esami_disp[i].ID, esami_disp[i].corso.nome, esami_disp[i].data.day, esami_disp[i].data.month, esami_disp[i].data.year, esami_disp[i].corso.crediti);
+		}
+		printf("\n\nTotale appelli: %d\n------------------------------", welcome_size);
+
 	}
 
 	else {
-		printf("\033[1;91mLogin Fallita! Matricola non registrata.\n", buffer);
+		printf("\033[1;91mLogin Fallita! Matricola non registrata.\n");
 	}
 
 	return 0;
