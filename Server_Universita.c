@@ -19,6 +19,7 @@ Implementa il server della segreteria
 #define MAX_SIZE 1024
 #define MAX_100	 100
 #define MAX_CORSI 128
+#define MAT_SIZE 11
 
 /*------------------------------------
    	 DEFINIZIONI DELLE STRUTTURE
@@ -100,9 +101,15 @@ int main(int argc, char const *argv[]) {
 
             close(listen_fd);
 
-            //Ricevo il bit iniziale: se = 1, la segreteria vuole aggiungere un esame; se = 0, la segeteria inoltra una prenotazione
+            //Ricevo il bit iniziale
             FullRead(connfd, &bit_iniziale, sizeof(char));
 
+            /* Se il bit iniziale è
+             * 1 - Il client segreteria vuole aggiungere un nuovo appello
+             * 2 - Il client segreteria richiede la lista dei corsi per i quali sono disponibili appelli
+             * 3 - Il client segreteria richiede la lista degli appelli per un determinato corso
+             * 4 - Il client segreteria inoltra la prenotazione di un appello per uno studente
+             */
 
             if(bit_iniziale == '1'){
             	ricevi_esame(connfd);
@@ -111,6 +118,8 @@ int main(int argc, char const *argv[]) {
             	inviaCorsiSegreteria("esami.txt", connfd);
             else if (bit_iniziale == '3')
             	inviaEsamiSegreteria(connfd);
+            else
+            	riceviPrenotazione(connfd);
 
             close(connfd);
             exit(0);
@@ -126,16 +135,16 @@ int main(int argc, char const *argv[]) {
 /*------------------------------------
    IMPLEMENTAZIONE DELLE FUNZIONI
 ------------------------------------*/
-
+/* Funzione che riceve un appello dal client segreteria */
 void ricevi_esame(int connfd){
 
 	ESAME esame;
 
-	FullRead(connfd, &esame, sizeof(ESAME));
+	FullRead(connfd, &esame, sizeof(ESAME));	// Ricevo la struttura di tipo ESAME che contiene le info sull'appello
 
-	esame.ID = contaEsami("esami.txt")+1;
+	esame.ID = contaEsami("esami.txt")+1;	// Assegno come ID all'appello il numero di appelli già presenti + 1
 
-	memorizza_esame(esame);
+	memorizza_esame(esame);	// Con memorizza_esame salvo l'appello nel file esami.txt
 
 	printf("[Server universitario] \033[1;32mHo aggiunto il seguente esame %s - %d\033[1;0m\n", esame.corso.nome, esame.corso.crediti);
 
@@ -143,15 +152,62 @@ void ricevi_esame(int connfd){
 
 }
 
+void riceviPrenotazione(int connfd){
+
+	int id_appello, ack = 1, fd;
+	char matricola[MAT_SIZE];
+
+	// Ricevo dal server della segreteria l'ID dell'appello per il quale lo studente vuole prenotarsi
+	FullRead(connfd, &id_appello, sizeof(int));
+	// Ricevo dal server della segreteria la matricola dello studente che vuole prenotare l'appello
+	FullRead(connfd, &matricola, MAT_SIZE);
+
+	if ((fd = open("prenotazioni.txt", O_WRONLY | O_APPEND, 0777)) == -1) {
+		perror("Errore durante l'apertura del file");
+		exit(1);
+	}
+
+	// Accedo in mutua esclusione al file
+	if(flock(fd, LOCK_EX) < 0) {
+		perror("flock() error");
+		exit(1);
+	}
+
+	dprintf(fd, "%s;%d", matricola, id_appello);
+
+	if (flock(fd, LOCK_UN) < 0) {
+		perror("flock() unlock error");
+		exit(1);
+	}
+
+	close(fd);
+
+	// Invio l'ack al server della segreteria
+	FullWrite(connfd, &ack, sizeof(int));
+
+	printf("Ho ricevuto la prenotazione %d - %s", id_appello, matricola);
+
+}
+
+/* La funzione memorizza_esame prende in input un appello contenuto nella struttura di
+ * tipo ESAME e lo salva nel file esami.txt
+ */
 void memorizza_esame(ESAME esame){
 
-	int fd = open("esami.txt", O_WRONLY | O_APPEND, 0777);
+	int fd;
 
+	if ((fd = open("esami.txt", O_WRONLY | O_APPEND, 0777)) == -1) {
+		perror("Errore durante l'apertura del file");
+		exit(1);
+	}
+
+	// Accedo in mutua esclusione al file
 	if(flock(fd, LOCK_EX) < 0) {
 		perror("flock() error");
 	    exit(1);
 	}
 
+	// Scrivo le info dell'appello nel file esami.txt
 	dprintf(fd, "%d;%s;%d;%d;%d;%d\n", esame.ID, esame.corso.nome, esame.corso.crediti, esame.data.day, esame.data.month, esame.data.year);
 
 	if (flock(fd, LOCK_UN) < 0) {
@@ -162,6 +218,9 @@ void memorizza_esame(ESAME esame){
 	close(fd);
 }
 
+/* La funzione contaEsami conta il numero totale di appelli memorizzati nel file
+ * esami.txt. Ritorna il numero degli appelli.
+ */
 int contaEsami(const char *nomeFile){
 
 	int fd = open(nomeFile, O_RDONLY);
@@ -174,6 +233,7 @@ int contaEsami(const char *nomeFile){
 	 int conteggio = 0;
 	 char c;
 
+	 // Scorro il file e ad ogni riga letta aumento il conteggio di 1
 	 while(read(fd, &c, 1) > 0){
 		 if (c == '\n')
 			 conteggio++;
@@ -185,6 +245,9 @@ int contaEsami(const char *nomeFile){
 
 }
 
+/* La funzione contaEsamiN è una variante di contaEsami che restituisce il numero di appelli
+ * totale per un determinato corso identificato da *nomeCorso passato come argomento.
+ */
 int contaEsamiN(const char *nomeCorso){
 
 	char *buffer = (char *)malloc(MAX_SIZE);
@@ -205,15 +268,19 @@ int contaEsamiN(const char *nomeCorso){
 		exit(1);
 	}
 
+	// Mi posiziono all'inizio del file
 	lseek(fd, 0, SEEK_SET);
 
 	int conteggio = 0;
 	char c;
+
+	// Scorro il file e se trovo un appello del corso identificato da *nomeCorso incremento il conteggio
 	while(read(fd, &c, 1) > 0){
 		if (c == '\n'){
 			buffer[conteggio] = '\0';
 		 	sscanf(buffer, "%d;%49[^;];%d;%d;%d;%d", &tmp_esame.ID, tmp_esame.corso.nome, &tmp_esame.corso.crediti, &tmp_esame.data.day, &tmp_esame.data.month, &tmp_esame.data.year);
 
+		 	// Confronto nomeCorso con il nome del corso relativo all'appello letto
 		 	if (strcmp(nomeCorso, tmp_esame.corso.nome) == 0){
 		 		numEsami++;
 		 	}
@@ -235,6 +302,7 @@ int contaEsamiN(const char *nomeCorso){
 		exit(1);
 	}
 
+	// Libero la memoria allocata a buffer
 	free(buffer);
 	close(fd);
 	return numEsami;
@@ -306,6 +374,7 @@ void inviaEsamiSegreteria(int connfd){
 
 	FullWrite(connfd, &numero_esami, sizeof(int));
 	FullWrite(connfd, esami, sizeof(ESAME)*numero_esami);
+
 
 }
 
