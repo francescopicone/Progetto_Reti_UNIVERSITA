@@ -36,7 +36,7 @@ typedef struct Corso {
 } CORSO;
 
 //Struttura per memorizzare una data
-typedef struct {
+typedef struct Date{
     int day;
     int month;
     int year;
@@ -207,11 +207,17 @@ int main(int argc, char **argv) {
 				// Ricevo l'ack dal server segreteria
 				FullRead(socket_fd, &ack, sizeof(int));
 
+				// Se ack = 1 la prenotazione è stata effettuata, se = 0 lo studente è già prenotato per quell'appello
+				// altrimenti si è verificato un errore sul server
+
 				if (ack == 1)
 					printf("\033[1;32m\nPrenotazione effettuata correttamente! Uscita in corso...\n\n\033[1;0m");
+				else if (ack == 0)
+					printf("\033[1;91m\nErrore. Sei già prenotato per questo appello.\033[1;0m\n\n");
 				else
-					printf("\033[1;91m\nErrore durante la prenotazione. Uscita in corso...\033[1;0m");
+					printf("\033[1;91m\nErrore durante la prenotazione. Uscita in corso...\033[1;0m\n\n");
 			}
+
 			else
 				printf("\033[1;91m\nNessun appello disponibile per %s. Uscita in corso...\n\n\033[1;0m", buffer);
 

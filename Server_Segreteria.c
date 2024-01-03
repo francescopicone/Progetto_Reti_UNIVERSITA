@@ -40,7 +40,7 @@ typedef struct Corso {
 } CORSO;
 
 //Struttura per memorizzare una data
-typedef struct {
+typedef struct Date{
     int day;
     int month;
     int year;
@@ -136,7 +136,7 @@ int main(int argc, char const *argv[]) {
     sleep(1);
 
     while(1){
-    	printf("Selezione: \n\n------------------------------\n\n1 - inserisci un nuovo esame\n\n------------------------------\n\nDigita la tua scelta: ");
+    	printf("\nOperazioni disponibili: \n\n------------------------------\n\n1 - inserisci un nuovo esame\n\n------------------------------\n\nDigita la tua scelta: ");
     	scanf("%d", &scelta);
     	while (getchar() != '\n');
     
@@ -231,7 +231,7 @@ void rispondiStudente(int connfd){
 void invia_esame_server_u(){
 
 	ESAME esame;
-	int socket_fd;
+	int socket_fd, ack_size;
 	struct sockaddr_in server_addr_u;
 	char bit_iniziale = '1';	// bit_iniziale inviato al server universitario = 1 per far capire che devo inviargli un appello
 	int result;
@@ -261,8 +261,9 @@ void invia_esame_server_u(){
 	}
 
 	// Leggo in input da tastiera il numero dei crediti dell'appello
-	printf("Crediti esame: ");
-	scanf("%d", &esame.corso.crediti);
+		printf("Crediti esame: ");
+		scanf("%d", &esame.corso.crediti);
+
 
 	// Leggo in input da tastiera la data dell'appello nel formato dd/mm/aaaa
 	while(1){
@@ -274,19 +275,23 @@ void invia_esame_server_u(){
 		else {
 			printf("\nData non corretta. Riprovare.\n");
 			int c;
+			// Leggo tutti i caratteri nel buffer stdin per pulirlo per evitare che caratteri rimanenti influiscono sulla lettura successiva
 			while ((c = getchar()) != '\n' && c != EOF);
 		}
 	}
 
-
-	printf("Invio %s con %d crediti del %d/%d/%d\n", esame.corso.nome, esame.corso.crediti, esame.data.day, esame.data.month, esame.data.year);
-
+	printf("\nInvio %s con %d crediti del %d/%d/%d\n", esame.corso.nome, esame.corso.crediti, esame.data.day, esame.data.month, esame.data.year);
 	// Mi connetto al server universitario
 	Connect(socket_fd, (struct sockaddr *)&server_addr_u, sizeof(server_addr_u));
 	// Invio il bit iniziale = 1
 	FullWrite(socket_fd, &bit_iniziale, sizeof(char));
 	// Invio la struttura esame contenente tutti i dati dell'appello inseriti
 	FullWrite(socket_fd, &esame, sizeof(esame));
+	// Ricevo la dimensione dell'ack dal server universitario
+	FullRead(socket_fd, &ack_size, sizeof(int));
+	char *buffer = (char *)malloc(ack_size);
+	FullRead(socket_fd, buffer, ack_size);
+	printf("%s\033[1;0m", buffer);
 
 	// Chiudo la connessione
 	close(socket_fd);
@@ -404,7 +409,6 @@ int inoltraPrenotazioneServerU(int id_appello, STUDENTE studente){
 
 	// Invio il bit iniziale al server universitario per fargli capire che gli sto inoltrando una prenotazione
 	FullWrite(socket_fd, &bit_iniziale, sizeof(char));
-
 	// Invio al server universitario l'ID dell'appello per il quale lo studente vuole prenotarsi
 	FullWrite(socket_fd, &id_appello, sizeof(int));
 	// Invio al server universitario la matricola dello studente che vuole prenotarsi
@@ -412,6 +416,7 @@ int inoltraPrenotazioneServerU(int id_appello, STUDENTE studente){
 	// Ricevo l'ack da parte del server universitario
 	FullRead(socket_fd, &ack, sizeof(int));
 
+	// Ritorno l'ack
 	return ack;
 }
 

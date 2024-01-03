@@ -33,7 +33,7 @@ typedef struct Corso {
 } CORSO;
 
 //Struttura per memorizzare una data
-typedef struct {
+typedef struct Date{
     int day;
     int month;
     int year;
@@ -55,10 +55,11 @@ typedef struct Esame{
 //void Listen(int listen_fd, int n);		// Funzione wrapped per la listen
 
 void ricevi_esame(int connfd);
-void memorizza_esame(ESAME esame);
+int memorizza_esame(ESAME esame);
 int contaEsami(const char *nomeFile);
 void inviaEsamiSegreteria(int connfd);
 void inviaCorsiSegreteria(const char *nomeFile, int connfd);
+int controllaPrenotazioneEsistente(const char *matricola, int id_appello);
 
 /*------------------------------------
    	  IMPLEMENTAZIONE DEL MAIN
@@ -84,9 +85,9 @@ int main(int argc, char const *argv[]) {
 
     Listen(listen_fd, 1024);
 
-    for (;;) {
+    printf("\033[1;32m[Server universitario]: Server online\033[1;0m\n");
 
-    printf("[Server universitario] Attendo nuove richieste\n");
+    for (;;) {
 
         connfd = Accept(listen_fd, NULL, NULL);
 
@@ -138,15 +139,30 @@ int main(int argc, char const *argv[]) {
 /* Funzione che riceve un appello dal client segreteria */
 void ricevi_esame(int connfd){
 
+	char ack_message[] = "\033[1;32m\nEsame aggiunto con successo!";
+	char ack_message_err[] = "\033[1;91m\nSi è verificato un errore sul server. Riprovare.";
+	int ack_size, result;
+
 	ESAME esame;
 
 	FullRead(connfd, &esame, sizeof(ESAME));	// Ricevo la struttura di tipo ESAME che contiene le info sull'appello
 
-	esame.ID = contaEsami("esami.txt")+1;	// Assegno come ID all'appello il numero di appelli già presenti + 1
+	esame.ID = contaEsami("esami.txt")+1;	// Assegno come ID all'appello il numero di appelli già presenti + 1, se il file esami non esiste ritorna -1
 
-	memorizza_esame(esame);	// Con memorizza_esame salvo l'appello nel file esami.txt
+	result = memorizza_esame(esame);	// Con memorizza_esame salvo l'appello nel file esami.txt, se il salvataggio fallisce ritorna 0 altrimenti 1
 
-	printf("[Server universitario] \033[1;32mHo aggiunto il seguente esame %s - %d\033[1;0m\n", esame.corso.nome, esame.corso.crediti);
+	if (result){
+		printf("\n[Server universitario] Aggiunto l'esame %s - %d\033[1;0m\n", esame.corso.nome, esame.corso.crediti);
+		ack_size = strlen(ack_message)+1;
+		FullWrite(connfd, &ack_size, sizeof(int));
+		FullWrite(connfd, &ack_message, ack_size);
+	}
+
+	else {
+		ack_size = strlen(ack_message_err)+1;
+		FullWrite(connfd, &ack_size, sizeof(int));
+		FullWrite(connfd, &ack_message_err, ack_size);
+	}
 
 	close(connfd);
 
@@ -162,49 +178,60 @@ void riceviPrenotazione(int connfd){
 	// Ricevo dal server della segreteria la matricola dello studente che vuole prenotare l'appello
 	FullRead(connfd, &matricola, MAT_SIZE);
 
-	if ((fd = open("prenotazioni.txt", O_WRONLY | O_APPEND, 0777)) == -1) {
-		perror("Errore durante l'apertura del file");
-		exit(1);
+	/* con controllaPrenotazioneEsistente controllo se esiste già una prenotazione per lo studente matricola dell'appello id_appello
+	   ritorna 1 se non esiste, 0 se esiste, -1 in caso di errore */
+	ack = controllaPrenotazioneEsistente(matricola, id_appello);
+
+	// Se ack = 1 non esiste alcuna prenotazione ed il server procede a memorizzarla in prenotazioni.txt
+	if (ack == 1){
+		if ((fd = open("prenotazioni.txt", O_WRONLY | O_APPEND | O_CREAT, 0777)) == -1) {
+			perror("Errore durante l'apertura del file");
+			ack = -1;
+		}
+
+		// Accedo in mutua esclusione al file
+		if(flock(fd, LOCK_EX) < 0) {
+			perror("flock() error");
+			ack = -1;
+		}
+
+		// Scrivo la prenotazione nel file
+		dprintf(fd, "%s;%d\n", matricola, id_appello);
+
+		if (flock(fd, LOCK_UN) < 0) {
+			perror("flock() unlock error");
+			ack = -1;
+		}
+
+		// Chiudo il file descriptor
+		close(fd);
+
+		// Stampo a schermo la prenotazione salvata
+		printf("\n[Server universitario] Ricevuta la prenotazione di %s per l'esame %d", matricola, id_appello);
 	}
-
-	// Accedo in mutua esclusione al file
-	if(flock(fd, LOCK_EX) < 0) {
-		perror("flock() error");
-		exit(1);
-	}
-
-	dprintf(fd, "%s;%d", matricola, id_appello);
-
-	if (flock(fd, LOCK_UN) < 0) {
-		perror("flock() unlock error");
-		exit(1);
-	}
-
-	close(fd);
 
 	// Invio l'ack al server della segreteria
 	FullWrite(connfd, &ack, sizeof(int));
 
-	printf("Ho ricevuto la prenotazione %d - %s", id_appello, matricola);
 
 }
 
 /* La funzione memorizza_esame prende in input un appello contenuto nella struttura di
  * tipo ESAME e lo salva nel file esami.txt
  */
-void memorizza_esame(ESAME esame){
+int memorizza_esame(ESAME esame){
 
 	int fd;
 
-	if ((fd = open("esami.txt", O_WRONLY | O_APPEND, 0777)) == -1) {
+	if ((fd = open("esami.txt", O_WRONLY | O_APPEND | O_CREAT, 0777)) == -1) {
 		perror("Errore durante l'apertura del file");
-		exit(1);
+		return 0;
 	}
 
 	// Accedo in mutua esclusione al file
 	if(flock(fd, LOCK_EX) < 0) {
 		perror("flock() error");
-	    exit(1);
+	    return 0;
 	}
 
 	// Scrivo le info dell'appello nel file esami.txt
@@ -212,10 +239,11 @@ void memorizza_esame(ESAME esame){
 
 	if (flock(fd, LOCK_UN) < 0) {
 	    perror("flock() unlock error");
-	    exit(1);
+	    return 0;
 	}
 
 	close(fd);
+	return 1;
 }
 
 /* La funzione contaEsami conta il numero totale di appelli memorizzati nel file
@@ -227,7 +255,7 @@ int contaEsami(const char *nomeFile){
 
 	 if (fd < 0) {
 		 perror("open() error");
-	     	 exit(1);
+	     return -1;
 	 }
 
 	 int conteggio = 0;
@@ -240,7 +268,6 @@ int contaEsami(const char *nomeFile){
 	 }
 
 	 close(fd);
-
 	 return conteggio;
 
 }
@@ -253,8 +280,6 @@ int contaEsamiN(const char *nomeCorso){
 	char *buffer = (char *)malloc(MAX_SIZE);
 	ESAME tmp_esame;
 	int numEsami = 0;
-
-	printf("\nNome corso: %s", nomeCorso);
 
 	int fd = open("esami.txt", O_RDONLY);
 
@@ -309,6 +334,67 @@ int contaEsamiN(const char *nomeCorso){
 }
 
 
+/* La funzione controllaPrenotazioneEsistente controlla nel file prenotazioni.txt se esiste
+ * già la prenotazione dello studente per un determinato esame. Ritorna 1 se non esiste, 0 se
+ * esiste, -1 in caso di errore.
+ */
+int controllaPrenotazioneEsistente(const char *matricola, int id_appello) {
+
+	char *buffer = (char *)malloc(MAX_SIZE);
+	int result = 1, fd, conteggio = 0;
+	char c, tmp_matricola[MAT_SIZE];
+	int tmp_id_appello;
+
+	// Apro il file prenotazioni.txt, se non esiste non esistono prenotazioni e ritorno 1
+	if ((fd = open("prenotazioni.txt", O_RDONLY)) == -1) {
+		perror("Errore durante l'apertura del file");
+		return 1;
+	}
+
+	// Accedo in mutua esclusione al file prenotazioni.txt
+	if(flock(fd, LOCK_EX) < 0) {
+		perror("flock() error");
+		return -1;
+	}
+
+	// Scorro il file e se trovo una prenotazione esistente dello studente matricola per quell'appello imposto result = 0
+	while(read(fd, &c, 1) > 0){
+		if (c == '\n'){
+			buffer[conteggio] = '\0';
+			sscanf(buffer, "%10[^;];%d", tmp_matricola, &tmp_id_appello);
+
+			printf("\nConfronto %s - %d con %s - %d", tmp_matricola, tmp_id_appello, matricola, id_appello);
+			// Confronto nomeCorso con il nome del corso relativo all'appello letto
+			if (strcmp(tmp_matricola, matricola) == 0){
+				if (tmp_id_appello == id_appello){
+					free(buffer);
+			 		result = 0;
+			 		break;
+			 	}
+			}
+
+			 free(buffer);
+			 buffer = (char *)malloc(MAX_SIZE);
+			 conteggio = 0;
+		}
+
+		else {
+			buffer[conteggio] = c;
+			conteggio++;
+		}
+	}
+
+	if (flock(fd, LOCK_UN) < 0) {
+		perror("flock() unlock error");
+		return -1;
+	}
+
+	close(fd);
+	return result;
+
+}
+
+
 void inviaEsamiSegreteria(int connfd){
 
 	int numero_esami, dim;
@@ -320,7 +406,6 @@ void inviaEsamiSegreteria(int connfd){
 	FullRead(connfd, nome_corso, dim);
 
 	numero_esami = contaEsamiN(nome_corso);
-	printf("Numero esami tot.: %d", numero_esami);
 	ESAME *esami = (ESAME *)malloc(numero_esami*sizeof(CORSO));
 
 	int fd = open("esami.txt", O_RDONLY);
