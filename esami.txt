@@ -1,7 +1,4 @@
-1;Algebra;12;24;1;2024
-2;Informatica Teorica;6;12;1;2024
-3;Onject Orientinf;12;22;1;2024
-4;Reti II;9;16;1;2024
-5;Basi Di Dati;9;29;1;2024
-6;Programmazione I;6;18;1;2024
-7;Analisi II;12;17;1;2024
+1;Basi Di Dati;9;29;1;2024
+2;Programmazione I;6;18;1;2024
+3;Analisi II;12;17;1;2024
+4;Reti di Calcolatori;9;25;1;2024

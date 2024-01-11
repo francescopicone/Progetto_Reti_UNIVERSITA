@@ -363,7 +363,6 @@ int controllaPrenotazioneEsistente(const char *matricola, int id_appello) {
 			buffer[conteggio] = '\0';
 			sscanf(buffer, "%10[^;];%d", tmp_matricola, &tmp_id_appello);
 
-			printf("\nConfronto %s - %d con %s - %d", tmp_matricola, tmp_id_appello, matricola, id_appello);
 			// Confronto nomeCorso con il nome del corso relativo all'appello letto
 			if (strcmp(tmp_matricola, matricola) == 0){
 				if (tmp_id_appello == id_appello){
@@ -453,10 +452,6 @@ void inviaEsamiSegreteria(int connfd){
 
 	close(fd);
 
-	for(int j=0; j<numero_esami; j++){
-		printf("\n%d - %s", esami[j].ID, esami[j].corso.nome);
-	}
-
 	FullWrite(connfd, &numero_esami, sizeof(int));
 	FullWrite(connfd, esami, sizeof(ESAME)*numero_esami);
 
@@ -509,7 +504,6 @@ void inviaCorsiSegreteria(const char *nomeFile, int connfd){
 
 	for(int i=0; i<numCorsi; i++){
 			strcpy(esami[i].nome, tmp_corsi[i].nome);
-			printf("%s, ", esami[i].nome);
 	}
 
 	close(fd);
